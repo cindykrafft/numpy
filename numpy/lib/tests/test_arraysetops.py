@@ -1185,6 +1185,43 @@ class TestUnique:
         assert_array_equal(unq, np.array([1, np.nan]))
         assert_array_equal(not_unq, np.array([1, np.nan, np.nan, np.nan]))
 
+    def test_unique_datetime_nat_equal_nan(self):
+        # The hash-based path (no optional output) must treat NaT like the
+        # sorting path treats NaN: collapsed with equal_nan=True, kept
+        # separate with equal_nan=False.
+        a = np.array(["2020-01-01", "NaT", "2021-01-01", "NaT"], dtype="M8[D]")
+        expected = np.array(["2020-01-01", "2021-01-01", "NaT"], dtype="M8[D]")
+        assert_array_equal(np.unique(a), expected)
+        assert_array_equal(np.unique(a, return_counts=True)[0], expected)
+        expected_all = np.array(
+            ["2020-01-01", "2021-01-01", "NaT", "NaT"], dtype="M8[D]"
+        )
+        assert_array_equal(np.unique(a, equal_nan=False), expected_all)
+        assert_array_equal(
+            np.unique(a, equal_nan=False, return_counts=True)[0], expected_all
+        )
+
+    @pytest.mark.parametrize("dtype", [np.complex64, np.complex128, np.clongdouble])
+    def test_unique_complex_nan_representative(self, dtype):
+        # With equal_nan=True all complex values with a NaN part are
+        # equivalent and the returned one is the smallest in the sort order
+        # (real part first, NaN last), on the hash-based path as well as on
+        # the sorting path.
+        a = np.array(
+            [complex(np.nan, -3), complex(np.nan, np.nan), 1, complex(2, np.nan), 1],
+            dtype=dtype,
+        )
+        for res in (np.unique(a), np.unique(a, return_counts=True)[0]):
+            assert res.shape == (2,)
+            assert res[0] == 1
+            assert res[1].real == 2 and np.isnan(res[1].imag)
+        for res in (
+            np.unique(a, equal_nan=False),
+            np.unique(a, equal_nan=False, return_counts=True)[0],
+        ):
+            assert res.shape == (4,)
+            assert np.isnan(res[1:]).all()
+
     def test_unique_array_api_functions(self):
         arr = np.array(
             [
